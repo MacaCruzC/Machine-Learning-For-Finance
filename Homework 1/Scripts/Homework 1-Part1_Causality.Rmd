@@ -1,0 +1,183 @@
+---
+title: "Homework 1 - Part 1: Causal Analysis"
+output: html_notebook
+---
+### Notebook Setup
+```{r}
+library(imputeTS)
+library(dplyr)
+library(xts)
+library(vars)
+library(quantmod)
+library(lmtest)
+library(reshape2)
+library(ggplot2)
+#Opciones para exportar
+library(stargazer)
+#4install.packages("gridExtra")   # Install & load gridExtra
+#library("gridExtra")
+```
+
+### Load Data
+```{r}
+WorldMarkts99_20 <- readRDS("~/Desktop/Master/Materias/Term 3/ML for Finance/Homework/Homework 1/Data/WorldMarkts99_20.RDS")
+markets <- ls(WorldMarkts99_20)
+View(WorldMarkts99_20)
+```
+
+
+```{r}
+#retrieve_returns: Retrieve returns for a list of markets given a specified time period
+#Variables -> period: ‘daily’, ‘weekly’, ‘monthly’, ‘quarterly’, ‘yearly’
+#             type: arithmetic (discrete) or log (continuous)
+
+
+#### 2001/07-2003/06
+retrieve_returns <- function(sampling_per,type_c) {
+  returns <- xts() #empty time series object
+  for (i in seq_along(markets)){
+    sym <- markets[i]
+    daily_na <- na_interpolation(Ad(get(sym,envir = WorldMarkts99_20)),'linear')
+    returns <- merge(returns,periodReturn(daily_na,period = sampling_per,type =type_c))
+  }
+  names(returns)<-markets
+  return(returns)
+}
+
+method<-'log'
+period<-'200107/200306'
+
+weekly_returns <- retrieve_returns('weekly',method)
+weekly_returns <-weekly_returns[period]
+
+monthly_returns <-retrieve_returns('monthly',method)
+monthly_returns <- monthly_returns[period]
+
+```
+
+```{r}
+weekly_returns<-na_locf(weekly_returns,option = 'locf')
+monthly_returns <- na_locf(monthly_returns,option = 'locf')
+```
+
+
+### Granger Tests
+```{r}
+##Granger Test function
+## If the p-value is less than 0.05, one rejects the null hypothesis, and hence X causes Y .
+granger.test <- function(y, p)
+  { m <- ncol(y)
+
+    # Check that we have enough variables to sensibly do this.
+    if(m<2)
+      { stop(paste("Error: granger.test needs at least 2 variables"))
+      }
+
+    # Make objects to hold the results and names
+    results <- matrix(list(0),ncol(y),ncol(y))
+    varnames <- dimnames(y)[[2]]
+    colnames(results)<-varnames
+    rownames(results)<-varnames
+    
+    for (l in p){
+    for(i in 1:m)
+      { for (j in 1:m)
+          {
+            if(i==j) { next }
+            Y <- embed(cbind(y[,i], y[,j]), l+1)
+            X1 <- Y[, -(1:2)]
+            X2 <- X1[, ((1:l)*2) - (1 %% 2)]
+            restricted <- lm(Y[,1] ~ X2)
+            unrestricted <- lm(Y[,1] ~ X1)
+            
+            ssqR <- sum(restricted$resid^2)
+            ssqU <- sum(unrestricted$resid^2)
+
+            ftest <- ((ssqR - ssqU)/l)/(ssqU/(nrow(Y) - 2*l - 1))
+
+            # Save the results
+
+            endog.name <- varnames[i] #esto es y
+            exog.name <- varnames[j] # esto es x
+            pvalue<- 1 - pf(ftest, l, nrow(Y) - 2 * l - 1)
+            if(pvalue < 0.05){
+              causal = 1
+            }else{causal = 0}
+            results[exog.name,endog.name][[1]][l]<-causal
+            
+
+          }}
+      }
+    return(results)
+}
+```
+
+
+```{r}
+h = c(1,2,3,4)
+monthly_causality<-granger.test(monthly_returns,h)
+weekly_causality <-granger.test(weekly_returns,h)
+
+```
+
+
+```{r}
+volatilities_idx <- markets[12:13]
+get_vols <- function(period) {
+  
+  if(period == 'weekly'){
+    vols = xts()
+    for(i in seq_along(volatilities_idx)){
+      sym<-volatilities_idx[i]
+      daily <- get(sym,envir = WorldMarkts99_20)
+      weekly<- apply.weekly(daily,mean)
+      vols<-merge(vols,EMA(Ad(weekly),n=1,ratio = 1-0.94))
+    }
+    
+    colnames(vols)<-volatilities_idx
+    return(vols)
+    
+  } else if(period =='monthly'){
+    vols = xts()
+    for(i in seq_along(volatilities_idx)){
+  sym<-volatilities_idx[i]
+  daily <- get(sym,envir = WorldMarkts99_20)
+  monthly<- apply.monthly(daily,mean)
+  vols<- merge(vols,EMA(Ad(monthly),n=1,ratio = 1-0.94))
+    }
+    
+    colnames(vols)<-volatilities_idx
+    return(vols)
+  }
+}
+weekly_vol<-get_vols('weekly')
+weekly_vol<-weekly_vol[period]
+monthly_vol<-get_vols('monthly')
+monthly_vol<-monthly_vol[period]
+```
+
+
+```{r}
+monthly_volcausality<-granger.test(monthly_vol,h)
+weekly_volcausality <-granger.test(weekly_vol,h)
+```
+
+```{r}
+trans_string <- function(list) {
+  str <- paste(list, collapse = ", ")
+  return(str)
+}
+```
+
+
+```{r}
+#stargazer(monthly_causality) #Export to LaTex
+pdf("~/Desktop/Master/Materias/Term 3/ML for Finance/Homework/Homework 1/Outputs/monthly_causality.pdf")       # Export PDF
+grid.table(monthly_causality)
+dev.off()
+```
+
+
+
+        
+

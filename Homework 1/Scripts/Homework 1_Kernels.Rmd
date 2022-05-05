@@ -1,0 +1,236 @@
+---
+title: "Homework 1-Kernels"
+author: "Eric Bataller & Macarena Cruz"
+date: '2022-05-03'
+output: html_document
+---
+
+```{r}
+library(quantmod)
+library(xts)
+library(ggplot2)
+library(patchwork)
+```
+
+For each of the four kernels below, and the suggested values of their parameters,
+sample and plot a set of 5 different latent functions f from the Gaussian process prior:
+f ∼ N(0, K), where K is the covariance matrix. The kernels to try out are:
+
+### define the kernels
+```{r}
+SE <- function(a,b,l) {
+  se <- -sum((a-b)^2)
+  return(exp(se/l^2))
+}
+```
+
+```{r}
+RQ <- function(a,b,l,alpha) {
+  se <- sum((a-b)^2)
+  fraction <-1+(se/(alpha*l^2))
+  return(fraction^(-alpha))
+}
+```
+
+```{r}
+K3 <- function(a,b,l) {
+   suma <- -sum((sin(pi*(a-b)/3))^2)
+   fraction <- suma/(2*l^2)
+   return(2*exp(fraction))
+}
+
+```
+
+```{r}
+K4 <- function(a,b,l){
+  k <- -sum((a-b)^2)
+  frac_exp<- 2*exp(k/(2*l^2))
+  mult<- 1.5*sum((a*b))
+  return(frac_exp+mult)
+}
+```
+
+
+```{r}
+calcSigma_4 <- function(X1,X2,l, kernel,alp=1) {
+  Sigma <- matrix(rep(0, length(X1)*length(X2)), nrow=length(X1))
+  for (i in 1:nrow(Sigma)) {
+    for (j in 1:ncol(Sigma)) {
+      if (kernel =='SE'){
+      Sigma[i,j] <- SE(X1[i],X2[j],l=l)}
+      else if (kernel == 'RQ'){
+      Sigma[i,j] <- RQ(X1[i],X2[j],l=l,alpha=alp)
+      } else if (kernel =='K3'){
+      Sigma[i,j] <- K3(X1[i],X2[j],l=l)
+      } else if (kernel == 'K4'){
+      Sigma[i,j] <- K4(X1[i],X2[j],l=l)
+      }
+    }
+  }
+  return(Sigma)
+}
+
+```
+
+
+```{r}
+x.star <- seq(-10,10,len=200)
+n.samples <- 5
+
+```
+
+```{r}
+kernels = c('SE','RQ','K3','K4')
+SE_RQ = c(0.1,1,10)
+K3_K4 =c(0.1,1.5,5)
+alpha = c(1,5,10)
+
+for (ker in kernels){
+  if (ker == 'SE'){
+    plot_list = c()
+    plot_num = 0
+    for (par in SE_RQ){
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+
+    # Plot the result
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+      
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-2.5,2.5), name="output, f(x)") +
+      xlab("input, x") + ggtitle(paste('lambda=',par))
+      assign(plot,fig2a)
+    }
+    SEplot <- plot1 / plot2 / plot3 
+  }
+    if (ker == 'RQ'){
+    plot_list = c()
+    plot_num = 0
+    for (par in SE_RQ){
+      for(al in alpha){
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker,alp=al)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+
+    # Plot the result
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+
+      
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-2.5,2.5), name="output, f(x)") +
+      xlab("input, x") + ggtitle(paste('lambda=',par,'and alpha =',al))
+      assign(plot,fig2a)
+
+      }
+    }
+  RQ_1plot <- plot1 / plot2 / plot3
+  RQ_2plot <- plot4 / plot5 / plot6
+  RQ_3plot <- plot7 / plot8/ plot9
+    }
+  
+      if (ker == 'K3'){
+    plot_list = c()
+    plot_num = 0
+    for (par in K3_K4){
+      
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+      
+
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+      
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-2.5,2.5), name="output, f(x)") +
+      xlab("input, x")+ ggtitle(paste('lambda=',par))
+      assign(plot,fig2a)
+    
+    }
+    
+    K3plot <- plot1/plot2/plot3
+      }
+  
+        if (ker == 'K4'){
+    plot_list = c()
+    plot_num = 0
+    for (par in K3_K4){
+      
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+      
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-2.5,2.5), name="output, f(x)") +
+      xlab("input, x") + ggtitle(paste('lambda=',par))
+      assign(plot,fig2a)
+    
+    }
+  
+  K4plot <- plot1/plot2/plot3
+  }
+}
+
+```
+
+```{r}
+SEplot
+ggsave(plot = SEplot, width = 10, height = 10, dpi = 300, filename = "squished axis.pdf")
+```
+ 
+
+
