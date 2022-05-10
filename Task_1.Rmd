@@ -460,11 +460,11 @@ SEplot+ plot_annotation(
 
 ### Rational Quadratic Kernel
 
-$$
-k_{rq} = h^2
-$$
+$$k_{rq}(\mathbf{x,x'}) = h^2(1+\frac{(\mathbf{x-x'})^2}{\alpha \lambda^2})^{-\alpha} \quad \text{for,}\quad h=1; \lambda = 0.1,1,10; \alpha = 1,5,10$$
 
-This kernel is equivalent to summing over infinitely many squared exponential kernels
+This kernel is equivalent to summing over infinitely many squared exponential kernels. Hence, GP priors with this kernel are expected to see functions which vary smoothly across many length scales. When we compare the plots for \$\\alpha\$ = 1 we see that variability of the data is higher than the comparable plots in the squared exponential kernel. The behavior of \$\\lambda\$ is very similar to the squared exponential kernel, however as it multiplied by \$\\alpha\$ we expect to see and exageration in this behavior.
+
+The change in the variability introduced by \$\\lambda\$ in the kernel is maximized by the hyper parameter \$\\alpha\$. Hence for larger values of \$\\alpha\$ there is an obvious increase in the distance of the points from its mean for small values of \$\\lambda\$.
 
 ```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
 RQ_1plot+ plot_annotation(
@@ -491,6 +491,12 @@ RQ_3plot+ plot_annotation(
         panel.grid.minor = element_blank())
 ```
 
+### **Third Kernel**
+
+$$
+k_{3}(\mathbf{x,x'}) = 2exp(\frac{-sin(\pi(\mathbf{x-x'})/3)^2}{2 \lambda^2})+1.5\mathbf{xx'}, \quad \text{for} \quad h= 1,\lambda = 0.1,1,10
+$$
+
 ```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
 K3plot+ plot_annotation(
   title = 'Thrid Kernel Plot',
@@ -499,6 +505,12 @@ K3plot+ plot_annotation(
         panel.grid.minor = element_blank())
 ```
 
+### Fourth Kernel
+
+$$
+k_{4}(\mathbf{x,x'}) = 2exp(\frac{\mathbf{x-x'}^2}{2 \lambda^2}), \quad \text{for} \quad h= 1,\lambda = 0.1,1,10
+$$
+
 ```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
 K4plot+ plot_annotation(
   title = 'Fourht Kernel Plot',
@@ -506,3 +518,9 @@ K4plot+ plot_annotation(
 ) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
         panel.grid.minor = element_blank())
 ```
+
+## Question 6
+
+![](images/Scanned%20Documents-1.png)
+
+![](images/Scanned%20Documents-2.png)
