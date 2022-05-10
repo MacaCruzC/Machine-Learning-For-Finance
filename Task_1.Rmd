@@ -211,6 +211,8 @@ knitr::kable(weekly_causality,booktabs = TRUE,caption = 'Weekly Causality of the
   row_spec(1, extra_css = "border-upper: 1px solid")
 ```
 
+What we see in the causality of the returns that the majority of the return of the indices are not caused by other indices. However in the case of the JKSE (Jakarta Composite Index) we observe that its monthly returns are caused by the returns of the indices of other economies. This is also an observable behavior in the HSCE (Hang Seng China Enterprises Index) where its monthly returns in larger lags can be explained by other indices. In an economic sense, this is a logical behavior where we see leader economies and followers, in this case we would consider both the JKSE and the HSCE followers of indices in stronger economies and do not follow each other as it can be see in the causality of one another. This leader-follower behaviour is more evident in weekly returns, hence in a short term
+
 ```{r echo = FALSE, warning = FALSE}
 item = c()
 for (i in 1:length(monthly_volcausality)){
@@ -236,6 +238,8 @@ knitr::kable(weekly_volcausality,booktabs = TRUE,caption = 'Weekly Causality of 
   column_spec(1, bold = T, border_right = T) %>%
   row_spec(1, extra_css = "border-upper: 1px solid")
 ```
+
+Regarding volatility spill over, here we see the transmission of instability from market to market. Its is very clear from the causality results that markets are truly interconnected therefore in both short and medium term the instability from one market is transmitted to others.
 
 ## Question 4
 
@@ -491,11 +495,13 @@ RQ_3plot+ plot_annotation(
         panel.grid.minor = element_blank())
 ```
 
-### **Third Kernel**
+### **Periodic Kernel**
 
 $$
 k_{3}(\mathbf{x,x'}) = 2exp(\frac{-sin(\pi(\mathbf{x-x'})/3)^2}{2 \lambda^2})+1.5\mathbf{xx'}, \quad \text{for} \quad h= 1,\lambda = 0.1,1,10
 $$
+
+Once again the hyperparameter $\lambda$ introduces the variability of the series. The lower the value the more distance and rate of change in the values we see in our function. However, interestingly in this kernel we see that for smoother function there is a periodic pattern repeated, this pattern is very clear for $\lambda = 10$. This pattern is introduced by the sin function. The distance between repetitions is in this specific case 3
 
 ```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
 K3plot+ plot_annotation(
@@ -508,8 +514,10 @@ K3plot+ plot_annotation(
 ### Fourth Kernel
 
 $$
-k_{4}(\mathbf{x,x'}) = 2exp(\frac{\mathbf{x-x'}^2}{2 \lambda^2}), \quad \text{for} \quad h= 1,\lambda = 0.1,1,10
+k_{4}(\mathbf{x,x'}) = 2exp(\frac{\mathbf{x-x'}^2}{2 \lambda^2})+1.5\mathbf{xx'}, \quad \text{for} \quad h= 1,\lambda = 0.1,1,10
 $$
+
+This fourth kernel is a combination of a periodic kernel and a linear. While the periodic kernel is responsible for the distance of the points form its mean, the linear kernel is responsible for the trend of the function, hence this is not a stationary kernel. However we see a very similar pattern in the hyperparameter $\lambda$
 
 ```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
 K4plot+ plot_annotation(
