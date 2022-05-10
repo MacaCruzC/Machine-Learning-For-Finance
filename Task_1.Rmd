@@ -1,0 +1,508 @@
+---
+title: "Task 1"
+author: "Eric Bataller & Macarena Cruz"
+date: '2022-05-09'
+output: html_document
+---
+
+```{r include = FALSE, warning = FALSE}
+library(imputeTS)
+library(dplyr)
+library(xts)
+library(vars)
+library(quantmod)
+library(lmtest)
+library(reshape2)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(MASS)
+
+```
+
+## Question 1
+
+## Question 2
+
+## Question 3
+
+The dataset WorldMarkts99 20.RDS contains price history from 1999/01/01 to 2020/04/30 of 11 market indices worldwide plus VLIC and VIX. The objective of this exercise is to analyze the relationship between the returns and the volatility of this indices as it has been frequently observed that US markets leads other developed markets in Europe or Asia, and that at times the leader becomes the follower. In other words, it has been observed that the return of some indices behave like other asset´s returns of completely the opposite. To do so we will conduct a casual analysis utilizing granger causality in a specific time frame (from 07-2001 to 06 -200)
+
+To initialize the analysis we must note that the series contains missing data as it can be observed in the plot below.
+
+```{r echo = FALSE, warning = FALSE, fig.height= 7 , fig.width= 14}
+WorldMarkts99_20 <- readRDS('~/Desktop/Master/Materias/Term 3/ML for Finance/Homeworks/Homework 1/Data/WorldMarkts99_20.RDS')
+markets <- ls(WorldMarkts99_20)
+
+prices <- xts()
+for (i in seq_along(markets)){
+  sym <- markets[i]
+  prices <- merge(prices,Ad(get(sym,envir = WorldMarkts99_20)))
+}
+period<-'200107/200306'
+prices <- prices[period]
+prices_df <- data.frame(prices) %>%
+  mutate(date_price=index(prices))
+prices_longform <- melt(prices_df,id.vars = "date_price")
+
+ggplot(prices_longform, aes(x=date_price)) + 
+  geom_line(aes(y=value, col=variable)) + 
+  labs(title="Time Series of Market Indexes", 
+       subtitle="From 2001-07 to 2003-06", 
+       caption="Source: Yahoo Finance", 
+       y="Index price",
+       x='date', 
+       color=NULL) +  # change to monthly ticks and labels
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+```
+
+The first step in our analysis in to impute the missing data in the daily prices series. To do so we will employ the 'ImputeTS' library, a library specialized in time series imputation. As we are trying to impute data points between known data points in a series we will utilize the interpolation method of imputation. For this specific case we will use linear interpolation which is achieved by geometrically rendering a straight line between two adjacent points on a graph or plane. Having this values imputed in the daily series we can now calculate the monthly and weekly logarithmic returns of the series.
+
+After having calculated the periodic returns of the series we can initialize the causality analysis. To do so we use the granger.test function from the 'MSBVAR' library. The table below shows the causality analysis for the first four lags of the returns of these indices, note that the cause -\> effect analysis goes from row to column. The binary variable corresponds to causality, that is 1 if X causes Y (p-value is less than 0.05) and 0 otherwise.
+
+```{r echo = FALSE, warning = FALSE}
+### In this code we create the function granger.test (modified from original function in package MSVAR)
+##Granger Test function
+## If the p-value is less than 0.05, one rejects the null hypothesis, and hence X causes Y .
+granger.test <- function(y, p)
+  { m <- ncol(y)
+
+    # Check that we have enough variables to sensibly do this.
+    if(m<2)
+      { stop(paste("Error: granger.test needs at least 2 variables"))
+      }
+
+    # Make objects to hold the results and names
+    results <- matrix(list(0),ncol(y),ncol(y))
+    varnames <- dimnames(y)[[2]]
+    colnames(results)<-varnames
+    rownames(results)<-varnames
+    
+    for (l in p){
+    for(i in 1:m)
+      { for (j in 1:m)
+          {
+            if(i==j) { next }
+            Y <- embed(cbind(y[,i], y[,j]), l+1)
+            X1 <- Y[, -(1:2)]
+            X2 <- X1[, ((1:l)*2) - (1 %% 2)]
+            restricted <- lm(Y[,1] ~ X2)
+            unrestricted <- lm(Y[,1] ~ X1)
+            
+            ssqR <- sum(restricted$resid^2)
+            ssqU <- sum(unrestricted$resid^2)
+
+            ftest <- ((ssqR - ssqU)/l)/(ssqU/(nrow(Y) - 2*l - 1))
+
+            # Save the results
+
+            endog.name <- varnames[i] #esto es y
+            exog.name <- varnames[j] # esto es x
+            pvalue<- 1 - pf(ftest, l, nrow(Y) - 2 * l - 1)
+            if(pvalue < 0.05){
+              causal = 1
+            }else{
+              causal = 0}
+            results[exog.name,endog.name][[1]][l]<-causal
+            
+          }}
+      }
+    return(results)
+}
+### Now we create a function to return and impute the missing values in the daily series using interpolation
+#retrieve_returns: Retrieve returns for a list of markets given a specified time period
+#Variables -> period: ‘daily’, ‘weekly’, ‘monthly’, ‘quarterly’, ‘yearly’
+#             type: arithmetic (discrete) or log (continuous)
+
+
+#### 2001/07-2003/06
+retrieve_returns <- function(sampling_per,type_c) {
+  returns <- xts() #empty time series object
+  for (i in seq_along(markets)){
+    sym <- markets[i]
+    daily_na <- na_interpolation(Ad(get(sym,envir = WorldMarkts99_20)),'linear')
+    returns <- merge(returns,periodReturn(daily_na,period = sampling_per,type =type_c))
+  }
+  names(returns)<-markets
+  return(returns)
+}
+
+method<-'log'
+period<-'200107/200306'
+
+weekly_returns <- retrieve_returns('weekly',method)
+weekly_returns <-weekly_returns[period]
+
+monthly_returns <-retrieve_returns('monthly',method)
+monthly_returns <- monthly_returns[period]
+
+## Due to data constrution we me use LOCF missing data imputation
+
+weekly_returns<-na_locf(weekly_returns,option = 'locf')
+monthly_returns <- na_locf(monthly_returns,option = 'locf')
+
+
+h = c(1,2,3,4)
+monthly_causality<-granger.test(monthly_returns,h)
+weekly_causality <-granger.test(weekly_returns,h)
+
+### We repeat the process described before for the volatilities
+volatilities_idx <- markets
+get_vols <- function(period) {
+  
+  if(period == 'weekly'){
+    vols = xts()
+    for(i in seq_along(volatilities_idx)){
+      sym<-volatilities_idx[i]
+      daily <- na_interpolation(get(sym,envir = WorldMarkts99_20),'linear')
+      weekly<- apply.weekly(daily,mean)
+      vols<-merge(vols,EMA(Ad(weekly),n=1,ratio = 1-0.94))
+    }
+    
+    colnames(vols)<-volatilities_idx
+    return(vols)
+    
+  } else if(period =='monthly'){
+    vols = xts()
+    for(i in seq_along(volatilities_idx)){
+  sym<-volatilities_idx[i]
+  daily <- na_interpolation(get(sym,envir = WorldMarkts99_20),'linear')
+  monthly<- apply.monthly(daily,mean)
+  vols<- merge(vols,EMA(Ad(monthly),n=1,ratio = 1-0.94))
+    }
+    
+    colnames(vols)<-volatilities_idx
+    return(vols)
+  }
+}
+weekly_vol<-get_vols('weekly')
+weekly_vol<-weekly_vol[period]
+
+monthly_vol<-get_vols('monthly')
+monthly_vol<-monthly_vol[period]
+
+monthly_volcausality<-granger.test(monthly_vol,h)
+weekly_volcausality <-granger.test(weekly_vol,h)
+
+item = c()
+for (i in 1:length(monthly_causality)){
+  monthly_causality[i][[1]] <- append(item,paste(monthly_causality[i][[1]],collapse = ', '))
+}
+monthly_causality <- data.frame(monthly_causality)
+
+knitr::kable(monthly_causality,booktabs = TRUE,caption = 'Monthly Causality of the Returns') %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), font_size = 10,html_font = "Times New Roman") %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  row_spec(1, extra_css = "border-upper: 1px solid")
+```
+
+```{r echo = FALSE, warning = FALSE}
+item = c()
+for (i in 1:length(weekly_causality)){
+  weekly_causality[i][[1]] <- append(item,paste(weekly_causality[i][[1]],collapse = ', '))
+}
+weekly_causality <- data.frame(weekly_causality)
+
+knitr::kable(weekly_causality,booktabs = TRUE,caption = 'Weekly Causality of the Returns') %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), font_size = 10,html_font = "Times New Roman") %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  row_spec(1, extra_css = "border-upper: 1px solid")
+```
+
+```{r echo = FALSE, warning = FALSE}
+item = c()
+for (i in 1:length(monthly_volcausality)){
+  monthly_volcausality[i][[1]] <- append(item,paste(monthly_volcausality[i][[1]],collapse = ', '))
+}
+monthly_volcausality <- data.frame(monthly_volcausality)
+
+knitr::kable(monthly_volcausality,booktabs = TRUE,caption = 'Monthly Causality of the Volatilities') %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), font_size = 10,html_font = "Times New Roman") %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  row_spec(1, extra_css = "border-upper: 1px solid")
+```
+
+```{r echo = FALSE, warning = FALSE}
+item = c()
+for (i in 1:length(weekly_volcausality)){
+  weekly_volcausality[i][[1]] <- append(item,paste(weekly_volcausality[i][[1]],collapse = ', '))
+}
+weekly_volcausality <- data.frame(weekly_volcausality)
+
+knitr::kable(weekly_volcausality,booktabs = TRUE,caption = 'Weekly Causality of the Volatilities') %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), font_size = 10,html_font = "Times New Roman") %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  row_spec(1, extra_css = "border-upper: 1px solid")
+```
+
+## Question 4
+
+For this exercise we sampled 5 different functions for 200 point between -10 and 10 from a latent Gaussian process prior:
+
+$$
+f \sim \mathcal{N}(0,K)
+$$
+
+where K is the covariance matrix. We will sample these five functions using the 4 kernels with various parameters.
+
+### Squared Exponential Kernel
+
+$$k_{se}(\mathbf{x,x'}) = h^2 (\frac{\mathbf{(x,x')}^2}{\lambda^2}) \text{for} \quad h=1; \lambda = 0.1,1,10
+$$
+
+The functions are plotted below. The hyper parameter $\lambda$ describes the variance which determines the average distance of the data-generating function from its mean. Hence the smaller the value the higher the larger distance from its mean and large $\lambda$ value create smoother functions
+
+```{r echo= FALSE, warning=FALSE,fig.height= 8 , fig.width= 14}
+SE <- function(a,b,l) {
+  se <- -sum((a-b)^2)
+  return(exp(se/l^2))
+}
+
+RQ <- function(a,b,l,alpha) {
+  se <- sum((a-b)^2)
+  fraction <-1+(se/(alpha*l^2))
+  return(fraction^(-alpha))
+}
+
+K3 <- function(a,b,l) {
+   suma <- -sum((sin(pi*(a-b)/3))^2)
+   fraction <- suma/(2*l^2)
+   return(2*exp(fraction))
+}
+
+K4 <- function(a,b,l){
+  k <- -sum((a-b)^2)
+  frac_exp<- 2*exp(k/(2*l^2))
+  mult<- 1.5*sum((a*b))
+  return(frac_exp+mult)
+}
+
+calcSigma_4 <- function(X1,X2,l, kernel,alp=1) {
+  Sigma <- matrix(rep(0, length(X1)*length(X2)), nrow=length(X1))
+  for (i in 1:nrow(Sigma)) {
+    for (j in 1:ncol(Sigma)) {
+      if (kernel =='SE'){
+      Sigma[i,j] <- SE(X1[i],X2[j],l=l)}
+      else if (kernel == 'RQ'){
+      Sigma[i,j] <- RQ(X1[i],X2[j],l=l,alpha=alp)
+      } else if (kernel =='K3'){
+      Sigma[i,j] <- K3(X1[i],X2[j],l=l)
+      } else if (kernel == 'K4'){
+      Sigma[i,j] <- K4(X1[i],X2[j],l=l)
+      }
+    }
+  }
+  return(Sigma)
+}
+
+x.star <- seq(-10,10,len=200)
+n.samples <- 5
+
+kernels = c('SE','RQ','K3','K4')
+SE_RQ = c(0.1,1,10)
+K3_K4 =c(0.1,1.5,5)
+alpha = c(1,5,10)
+
+for (ker in kernels){
+  if (ker == 'SE'){
+    plot_list = c()
+    plot_num = 0
+    for (par in SE_RQ){
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+
+    # Plot the result
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+      
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-4,4), name="output, f(x)") +
+      xlab("input, x") + ggtitle(paste('lambda=',par))
+      assign(plot,fig2a)
+    }
+    SEplot <- plot1 / plot2 / plot3 
+    
+  }
+    if (ker == 'RQ'){
+    plot_list = c()
+    plot_num = 0
+    for (par in SE_RQ){
+      for(al in alpha){
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker,alp=al)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+
+    # Plot the result
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+
+      
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-4,4), name="output, f(x)") +
+      xlab("input, x") + ggtitle(paste('lambda=',par,'and alpha =',al))
+      assign(plot,fig2a)
+
+      }
+    }
+    
+  RQ_1plot <- plot1 / plot4 / plot7
+  RQ_2plot <- plot2 / plot5 / plot8
+  RQ_3plot <- plot3 / plot6 / plot9
+  
+    }
+  
+      if (ker == 'K3'){
+    plot_list = c()
+    plot_num = 0
+    for (par in K3_K4){
+      
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+      
+
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+      
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-2, ymax=2, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-4,4), name="output, f(x)") +
+      xlab("input, x")+ ggtitle(paste('lambda=',par))
+      assign(plot,fig2a)
+    
+    }
+    
+    K3plot <- plot1/plot2/plot3
+    
+
+      }
+  
+        if (ker == 'K4'){
+    plot_list = c()
+    plot_num = 0
+    for (par in K3_K4){
+      
+      sigma = calcSigma_4(x.star,x.star,l = par,kernel = ker)
+      functions <- matrix(rep(0,length(x.star)*n.samples), ncol=n.samples)
+      for (i in 1:n.samples) {
+        # Each column represents a sample from a multivariate normal distribution
+        # with zero mean and covariance sigma
+        functions[,i] <- mvrnorm(1, rep(0, length(x.star)), sigma)
+      }
+
+      functions <- cbind(x=x.star,as.data.frame(functions))
+      functions <- melt(functions,id="x")
+      
+      plot_num =  plot_num+1
+      plot <- paste('plot',plot_num,sep = '')
+      plot_list <- append(plot_list,plot)
+
+      fig2a <- ggplot(functions,aes(x=x,y=value)) +
+      geom_rect(xmin=-Inf, xmax=Inf, ymin=-10, ymax=10, fill="grey80") +
+      #geom_line(aes(group=variable),colour="blue") +
+      geom_line(aes(group=variable,colour=variable)) +
+      theme_bw() +
+      scale_y_continuous(lim=c(-20,20), name="output, f(x)") +
+      xlab("input, x") + ggtitle(paste('lambda=',par))
+      assign(plot,fig2a)
+    
+    }
+  
+  K4plot <- plot1/plot2/plot3
+
+        }
+}
+
+SEplot+ plot_annotation(
+  title = 'Squared Exponential Kernel Plot',
+  subtitle = 'Lambda = 0.1, 1 and 10'
+) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+```
+
+### Rational Quadratic Kernel
+
+$$
+k_{rq} = h^2
+$$
+
+This kernel is equivalent to summing over infinitely many squared exponential kernels
+
+```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
+RQ_1plot+ plot_annotation(
+  title = 'Rational Quadratic Kernel Plot',
+  subtitle = 'Lambda = 0.1, 1 and 10 with fixed alpha = 1'
+) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+
+```
+
+```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
+RQ_2plot+ plot_annotation(
+  title = 'Rational Quadratic Kernel Plot',
+  subtitle = 'Lambda = 0.1, 1 and 10 wit fixed alpha = 5'
+) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+```
+
+```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
+RQ_3plot+ plot_annotation(
+  title = 'Rational Quadratic Kernel Plot',
+  subtitle = 'Lambda = 0.1, 1 and 10 with alpha = 10'
+) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+```
+
+```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
+K3plot+ plot_annotation(
+  title = 'Thrid Kernel Plot',
+  subtitle = 'Lambda = 0.1, 1 and 10'
+) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+```
+
+```{r echo= FALSE, warning=FALSE, fig.height= 8 , fig.width= 14}
+K4plot+ plot_annotation(
+  title = 'Fourht Kernel Plot',
+  subtitle = 'Lambda = 0.1, 1 and 10'
+) &  theme(axis.text.x = element_text(angle = 90, vjust=0.5, size = 8),  # rotate x axis text
+        panel.grid.minor = element_blank())
+```
