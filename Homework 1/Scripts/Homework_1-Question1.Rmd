@@ -1,0 +1,89 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r, echo=FALSE}
+library(TTR)
+library(xts)
+library(lmtest)
+library(quantmod)
+library(ggplot2)
+```
+
+```{r, echo=FALSE}
+fileloc <- dirname(rstudioapi::getSourceEditorContext()$path)
+setwd(fileloc)
+rm(fileloc)
+WorldMarkts99_20 <- readRDS("../Data/WorldMarkts99_20.RDS")
+markets <- ls(WorldMarkts99_20)
+View(WorldMarkts99_20)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#retrieve_returns: Retrieve returns for a list of markets given a specified time period
+#Variables -> period: ‘daily’, ‘weekly’, ‘monthly’, ‘quarterly’, ‘yearly’
+#             type: arithmetic (discrete) or log (continuous)
+
+
+#### 2001/07-2003/06
+retrieve_returns <- function(sampling_per,type_c) {
+  returns <- xts() #empty time series object
+  for (i in seq_along(markets)){
+    sym <- markets[i]
+    daily_na <- na_interpolation(Ad(get(sym,envir = WorldMarkts99_20)),'linear')
+    returns <- merge(returns,periodReturn(daily_na,period = sampling_per,type =type_c))
+  }
+  names(returns)<-markets
+  return(returns)
+}
+
+method<-'log'
+period<-'200107/200306'
+
+daily_returns <- retrieve_returns('daily',method)
+daily_returns <-daily_returns[period]
+
+weekly_returns <- retrieve_returns('weekly',method)
+weekly_returns <-weekly_returns[period]
+
+monthly_returns <-retrieve_returns('monthly',method)
+monthly_returns <- monthly_returns[period]
+
+```
+
+## Question 1
+
+Note: The proof asked on the first part of this exercise can be found in the PDF attached to this Notebook.
+
+A comparison between the arithmetic MA volatility and the EWMA volatility can be seen in the following image for the IBEX index during the 07/2001 - 06/2003 time period. \lambda was set to 0.94 for the EWMA. The results were computed for a 5 days rolling window.
+
+```{r, echo=FALSE, warning=FALSE}
+##Do the same analysis for volatilities series of each market
+## Enough to consider the variance as  EMA of square returns
+## Do the analysis for week and month sampling periods
+## Optional: Apply  rolling windows with first year of data and step forward one period (week or month)
+
+IBEX <-daily_returns$IBEX^2
+arith_MA <- SMA(IBEX, n = 5)
+ewma <- EMA(IBEX, n = 5, ratio = 0.06)
+
+par(mfrow = c(1, 2))# space for one row of text at ticks and to separate plots
+plot(arith_MA)
+plot(ewma)
+
+```
+
+Notice how the plot on the right (EWMA volatility) presents a smoother behavior as it's more persistent than its counterpart (simple MA). This makes sense considering that in EWMA, past observations' contribution decay in a well behaved manner, whereas MA simply drops the past observation that falls outside the rolling window, causing more pronounced jumps in the resulting series. 
+
+
+
+
+
+
